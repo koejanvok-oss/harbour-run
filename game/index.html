@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harbour Run — a bush-plane flight game</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+    background: #0b1c2c; font-family: "Segoe UI", system-ui, -apple-system, sans-serif; }
+  #app { position: fixed; inset: 0; }
+  #app canvas { display: block; }
+  .panel { position: absolute; color: #eaf6ff; background: rgba(8, 24, 38, 0.55);
+    border: 1px solid rgba(150, 220, 255, 0.35); border-radius: 8px;
+    padding: 8px 12px; backdrop-filter: blur(2px); }
+  #hud-top { top: 12px; left: 12px; font-size: 15px; line-height: 1.5; min-width: 190px; }
+  #hud-top b { color: #ffd166; font-weight: 600; }
+  #hud-top .lbl { color: #9fd8ef; font-size: 11px; letter-spacing: 1px; }
+  #hud-mission { top: 12px; left: 50%; transform: translateX(-50%); text-align: center;
+    font-size: 15px; min-width: 260px; }
+  #hud-mission b { color: #8dff9e; }
+  #hud-msg { top: 84px; left: 50%; transform: translateX(-50%); font-size: 17px;
+    color: #ffe9a8; background: rgba(8, 24, 38, 0.45); border: none; padding: 6px 14px; }
+  #hud-fuel { top: 12px; right: 12px; text-align: right; font-size: 15px; min-width: 150px; }
+  #hud-fuel .bar { height: 8px; background: rgba(255,255,255,0.15); border-radius: 4px; margin-top: 5px; overflow: hidden; }
+  #hud-fuel .bar > div { height: 100%; background: #57d977; }
+  #hud-fuel .bar.low > div { background: #ff5d5d; }
+  #instruments { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%);
+    display: flex; gap: 10px; align-items: flex-end; }
+  #instruments canvas { background: rgba(6, 20, 32, 0.72); border: 1px solid rgba(150, 220, 255, 0.4);
+    border-radius: 50%; box-shadow: 0 0 14px rgba(90, 200, 255, 0.25) inset; }
+  #instruments .thr { width: 26px; height: 96px; background: rgba(6, 20, 32, 0.72);
+    border: 1px solid rgba(150, 220, 255, 0.4); border-radius: 6px; position: relative; overflow: hidden; }
+  #instruments .thr > div { position: absolute; left: 0; right: 0; bottom: 0; background: #ffb02e; }
+  #instruments .thr span { position: absolute; left: 0; right: 0; top: 2px; text-align: center;
+    color: #ffd166; font-size: 10px; letter-spacing: 1px; z-index: 1; }
+  #screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center; color: #eaf6ff;
+    background: linear-gradient(180deg, rgba(6, 22, 38, 0.55), rgba(6, 22, 38, 0.78)); }
+  #screen h1 { font-size: 54px; margin: 0 0 6px; letter-spacing: 4px; color: #ffd166;
+    text-shadow: 0 2px 18px rgba(0,0,0,0.6); }
+  #screen h2 { font-size: 18px; margin: 0 0 22px; font-weight: 400; color: #bfe6f7; }
+  #screen .missions { display: flex; gap: 14px; margin-bottom: 22px; }
+  #screen .mission { width: 220px; padding: 14px; border-radius: 10px; cursor: pointer;
+    background: rgba(10, 34, 54, 0.8); border: 1px solid rgba(150, 220, 255, 0.35); }
+  #screen .mission:hover { border-color: #ffd166; background: rgba(20, 52, 76, 0.9); }
+  #screen .mission b { display: block; font-size: 17px; color: #8dff9e; margin-bottom: 6px; }
+  #screen .mission span { font-size: 13px; color: #cfeefc; line-height: 1.45; }
+  #screen .keys { font-size: 13px; color: #9fd8ef; line-height: 1.8; margin-bottom: 18px; }
+  #screen .keys b { color: #ffd166; }
+  #screen .go { font-size: 16px; color: #ffe9a8; }
+  #screen .big { font-size: 40px; color: #ffd166; margin: 0 0 10px; }
+  #screen .sub { font-size: 17px; color: #cfeefc; max-width: 560px; line-height: 1.6; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="hud-top" class="panel hidden">
+  <div><span class="lbl">ALTITUDE</span><br><b id="hud-alt">0</b> m</div>
+  <div><span class="lbl">AIRSPEED</span><br><b id="hud-spd">0</b> kt</div>
+  <div><span class="lbl">HEADING</span><br><b id="hud-hdg">000°</b></div>
+  <div><span class="lbl">VERT SPEED</span><br><b id="hud-vs">0</b> m/s</div>
+</div>
+<div id="hud-mission" class="panel hidden"><b id="hud-mname">RING RUN</b><br><span id="hud-mprog">Ring 1 of 5</span></div>
+<div id="hud-msg" class="hidden"></div>
+<div id="hud-fuel" class="panel hidden">
+  <span class="lbl" style="color:#9fd8ef;font-size:11px;letter-spacing:1px">FUEL</span><br>
+  <b id="hud-fuel-txt">100%</b>
+  <div class="bar" id="hud-fuel-bar"><div style="width:100%"></div></div>
+</div>
+<div id="instruments" class="hidden">
+  <canvas id="gauge-horizon" width="96" height="96"></canvas>
+  <canvas id="gauge-speed" width="96" height="96"></canvas>
+  <canvas id="gauge-alt" width="96" height="96"></canvas>
+  <div class="thr"><span>THR</span><div id="thr-fill" style="height:0%"></div></div>
+</div>
+
+<div id="screen">
+  <h1>HARBOUR RUN</h1>
+  <h2>A bush plane, one island, and a runway that keeps moving away.</h2>
+  <div class="missions">
+    <div class="mission" data-mission="rings"><b>1 · RING RUN</b><span>Thread all five rings over the bay. Pure flying, no landing required.</span></div>
+    <div class="mission" data-mission="landing"><b>2 · HARBOUR LANDING</b><span>Take off from the strip, come back around, and put her down gently.</span></div>
+    <div class="mission" data-mission="circuit"><b>3 · CIRCUIT DASH</b><span>Rings one to five, then land — against the clock, on one tank of fuel.</span></div>
+  </div>
+  <div class="keys">
+    <b>W / S</b> throttle &nbsp;·&nbsp; <b>A / D</b> or <b>← / →</b> bank &amp; turn &nbsp;·&nbsp; <b>↑ / ↓</b> climb &amp; descend<br>
+    <b>Mouse</b> steers gently &nbsp;·&nbsp; <b>Space</b> air brake &nbsp;·&nbsp; <b>P</b> pause &nbsp;·&nbsp; <b>M</b> sound &nbsp;·&nbsp; <b>R</b> restart
+  </div>
+  <div class="go">Click a mission, or press 1 / 2 / 3 — then fly.</div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
